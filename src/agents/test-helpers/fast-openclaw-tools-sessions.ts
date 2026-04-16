@@ -44,6 +44,10 @@ vi.mock("../tools/update-plan-tool.js", () => ({
   createUpdatePlanTool: () => stubTool("update_plan"),
 }));
 
+vi.mock("../tools/skills-manage-tool.js", () => ({
+  createSkillsManageTool: () => stubTool("skills_manage"),
+}));
+
 vi.mock("../../channels/plugins/index.js", () => ({
   getChannelPlugin: () => null,
   normalizeChannelId: (channel?: string) => normalizeOptionalLowercaseString(channel),

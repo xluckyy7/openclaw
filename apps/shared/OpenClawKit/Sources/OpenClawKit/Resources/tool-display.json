@@ -369,6 +369,24 @@
         "plan.0.step"
       ]
     },
+    "skills_manage": {
+      "emoji": "🧠",
+      "title": "Skills Manage",
+      "actions": {
+        "create": {
+          "label": "create",
+          "detailKeys": [
+            "name"
+          ]
+        },
+        "patch": {
+          "label": "patch",
+          "detailKeys": [
+            "name"
+          ]
+        }
+      }
+    },
     "gateway": {
       "emoji": "🔌",
       "title": "Gateway",

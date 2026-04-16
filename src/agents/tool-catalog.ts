@@ -262,6 +262,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
+    id: "skills_manage",
+    label: "skills_manage",
+    description: "Create or patch workspace skills",
+    sectionId: "agents",
+    profiles: ["coding"],
+    includeInOpenClawGroup: true,
+  },
+  {
     id: "image",
     label: "image",
     description: "Image understanding",

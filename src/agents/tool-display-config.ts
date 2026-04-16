@@ -254,6 +254,20 @@ export const TOOL_DISPLAY_CONFIG: ToolDisplayConfig = {
       title: "Update Plan",
       detailKeys: ["explanation", "plan.0.step"],
     },
+    skills_manage: {
+      emoji: "🧠",
+      title: "Skills Manage",
+      actions: {
+        create: {
+          label: "create",
+          detailKeys: ["name"],
+        },
+        patch: {
+          label: "patch",
+          detailKeys: ["name"],
+        },
+      },
+    },
     gateway: {
       emoji: "🔌",
       title: "Gateway",

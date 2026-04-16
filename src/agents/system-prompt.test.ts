@@ -523,6 +523,25 @@ describe("buildAgentSystemPrompt", () => {
     );
   });
 
+  it("adds skills_manage self-evolution guidance only when the tool is available", () => {
+    const withTool = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      toolNames: ["skills_manage"],
+      skillsPrompt:
+        "<available_skills>\n  <skill>\n    <name>demo</name>\n  </skill>\n</available_skills>",
+    });
+    const withoutTool = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      skillsPrompt:
+        "<available_skills>\n  <skill>\n    <name>demo</name>\n  </skill>\n</available_skills>",
+    });
+
+    expect(withTool).toContain("after complex tasks");
+    expect(withTool).toContain("skills_manage(action=create");
+    expect(withTool).toContain("skills_manage(action=patch");
+    expect(withoutTool).not.toContain("skills_manage(action=create");
+  });
+
   it("appends available skills when provided", () => {
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/tmp/openclaw",

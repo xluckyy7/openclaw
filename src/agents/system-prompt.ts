@@ -148,11 +148,16 @@ function buildExecApprovalPromptGuidance(params: {
   return "When exec returns approval-pending, include the concrete /approve command from tool output as plain chat text for the user, and do not ask for a different or rotated code.";
 }
 
-function buildSkillsSection(params: { skillsPrompt?: string; readToolName: string }) {
+function buildSkillsSection(params: {
+  skillsPrompt?: string;
+  readToolName: string;
+  availableTools: Set<string>;
+}) {
   const trimmed = params.skillsPrompt?.trim();
   if (!trimmed) {
     return [];
   }
+  const hasSkillsManageTool = params.availableTools.has("skills_manage");
   return [
     "## Skills (mandatory)",
     "Before replying: scan <available_skills> <description> entries.",
@@ -161,6 +166,12 @@ function buildSkillsSection(params: { skillsPrompt?: string; readToolName: strin
     "- If none clearly apply: do not read any SKILL.md.",
     "Constraints: never read more than one skill up front; only read after selecting.",
     "- When a skill drives external API writes, assume rate limits: prefer fewer larger writes, avoid tight one-item loops, serialize bursts when possible, and respect 429/Retry-After.",
+    ...(hasSkillsManageTool
+      ? [
+          "- If `skills_manage` is available: after complex tasks (for example 5+ tool calls), tricky bug fixes, or non-trivial workflow discoveries, consider saving the approach as a reusable skill via `skills_manage(action=create, ...)`.",
+          "- If an existing skill is outdated, incomplete, or incorrect, patch it immediately with `skills_manage(action=patch, ...)` so future runs stay reliable.",
+        ]
+      : []),
     trimmed,
     "",
   ];
@@ -461,6 +472,7 @@ export function buildAgentSystemPrompt(params: {
     subagents: "List, steer, or kill sub-agent runs for this requester session",
     session_status:
       "Show a /status-equivalent status card (usage + time + Reasoning/Verbose/Elevated); use for model-use questions (📊 session_status); optional per-session model override",
+    skills_manage: "Create or patch workspace skills (SKILL.md)",
     image: "Analyze an image with the configured image model",
     image_generate: "Generate images with the configured image-generation model",
   };
@@ -489,6 +501,7 @@ export function buildAgentSystemPrompt(params: {
     "sessions_send",
     "subagents",
     "session_status",
+    "skills_manage",
     "image",
     "image_generate",
   ];
@@ -609,6 +622,7 @@ export function buildAgentSystemPrompt(params: {
   const skillsSection = buildSkillsSection({
     skillsPrompt,
     readToolName,
+    availableTools,
   });
   const memorySection = buildMemorySection({
     isMinimal,
