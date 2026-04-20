@@ -24,7 +24,12 @@ function resolveOtelUrl(endpoint: string | undefined, path: string): string | un
     return undefined;
   }
   const endpointWithoutQueryOrFragment = endpoint.split(/[?#]/, 1)[0] ?? endpoint;
+  // Support standard OTLP paths (/v1/traces, /v1/metrics, /v1/logs)
   if (/\/v1\/(?:traces|metrics|logs)$/i.test(endpointWithoutQueryOrFragment)) {
+    return endpoint;
+  }
+  // Support Alibaba Cloud OTLP paths (/api/otlp/traces, /api/otlp/metrics)
+  if (/\/api\/otlp\/(?:traces|metrics)$/i.test(endpointWithoutQueryOrFragment)) {
     return endpoint;
   }
   return `${endpoint}/${path}`;
