@@ -4,6 +4,7 @@ import {
   loadPluginManifestRegistry,
   resolveManifestContractPluginIds,
 } from "../manifest-registry.js";
+import { resolveBundledExplicitProviderContractsFromPublicArtifacts } from "../provider-contract-public-artifacts.js";
 import type {
   ImageGenerationProviderPlugin,
   MediaUnderstandingProviderPlugin,
@@ -16,6 +17,7 @@ import type {
   WebFetchProviderPlugin,
   WebSearchProviderPlugin,
 } from "../types.js";
+import { resolveBundledExplicitWebSearchProvidersFromPublicArtifacts } from "../web-provider-public-artifacts.explicit.js";
 import { BUNDLED_PLUGIN_CONTRACT_SNAPSHOTS } from "./inventory/bundled-capability-metadata.js";
 import { uniqueStrings } from "./shared.js";
 import {
@@ -314,6 +316,14 @@ function loadProviderContractEntriesForPluginId(pluginId: string): ProviderContr
     return cached;
   }
 
+  const publicArtifactEntries = resolveBundledExplicitProviderContractsFromPublicArtifacts({
+    onlyPluginIds: [pluginId],
+  });
+  if (publicArtifactEntries) {
+    cache.set(pluginId, publicArtifactEntries);
+    return publicArtifactEntries;
+  }
+
   try {
     providerContractLoadError = undefined;
     const entries = loadScopedCapabilityRuntimeRegistryEntries({
@@ -344,13 +354,28 @@ function loadProviderContractRegistry(): ProviderContractEntry[] {
   if (!providerContractRegistryCache) {
     try {
       providerContractLoadError = undefined;
-      providerContractRegistryCache = loadBundledCapabilityRuntimeRegistry({
-        pluginIds: resolveBundledProviderContractPluginIds(),
-        pluginSdkResolution: "dist",
-      }).providers.map((entry) => ({
-        pluginId: entry.pluginId,
-        provider: entry.provider,
-      }));
+      const pluginIds = resolveBundledProviderContractPluginIds();
+      const publicArtifactEntries = pluginIds.flatMap(
+        (pluginId) =>
+          resolveBundledExplicitProviderContractsFromPublicArtifacts({
+            onlyPluginIds: [pluginId],
+          }) ?? [],
+      );
+      const coveredPluginIds = new Set(publicArtifactEntries.map((entry) => entry.pluginId));
+      const remainingPluginIds = resolveBundledProviderContractPluginIds().filter(
+        (pluginId) => !coveredPluginIds.has(pluginId),
+      );
+      const runtimeEntries =
+        remainingPluginIds.length > 0
+          ? loadBundledCapabilityRuntimeRegistry({
+              pluginIds: remainingPluginIds,
+              pluginSdkResolution: "dist",
+            }).providers.map((entry) => ({
+              pluginId: entry.pluginId,
+              provider: entry.provider,
+            }))
+          : [];
+      providerContractRegistryCache = [...publicArtifactEntries, ...runtimeEntries];
     } catch (error) {
       providerContractLoadError = error instanceof Error ? error : new Error(String(error));
       providerContractRegistryCache = [];
@@ -454,15 +479,34 @@ export function resolveWebFetchProviderContractEntriesForPluginId(
 
 function loadWebSearchProviderContractRegistry(): WebSearchProviderContractEntry[] {
   if (!webSearchProviderContractRegistryCache) {
-    const registry = loadBundledCapabilityRuntimeRegistry({
-      pluginIds: resolveBundledManifestContractPluginIds("webSearchProviders"),
-      pluginSdkResolution: "dist",
-    });
-    webSearchProviderContractRegistryCache = registry.webSearchProviders.map((entry) => ({
-      pluginId: entry.pluginId,
-      provider: entry.provider,
-      credentialValue: resolveWebSearchCredentialValue(entry.provider),
-    }));
+    const pluginIds = resolveBundledManifestContractPluginIds("webSearchProviders");
+    const publicArtifactEntries = pluginIds.flatMap((pluginId) =>
+      (
+        resolveBundledExplicitWebSearchProvidersFromPublicArtifacts({
+          onlyPluginIds: [pluginId],
+        }) ?? []
+      ).map((provider) => ({
+        pluginId: provider.pluginId,
+        provider,
+        credentialValue: resolveWebSearchCredentialValue(provider),
+      })),
+    );
+    const coveredPluginIds = new Set(publicArtifactEntries.map((entry) => entry.pluginId));
+    const remainingPluginIds = resolveBundledManifestContractPluginIds("webSearchProviders").filter(
+      (pluginId) => !coveredPluginIds.has(pluginId),
+    );
+    const runtimeEntries =
+      remainingPluginIds.length > 0
+        ? loadBundledCapabilityRuntimeRegistry({
+            pluginIds: remainingPluginIds,
+            pluginSdkResolution: "dist",
+          }).webSearchProviders.map((entry) => ({
+            pluginId: entry.pluginId,
+            provider: entry.provider,
+            credentialValue: resolveWebSearchCredentialValue(entry.provider),
+          }))
+        : [];
+    webSearchProviderContractRegistryCache = [...publicArtifactEntries, ...runtimeEntries];
   }
   return webSearchProviderContractRegistryCache;
 }
@@ -481,6 +525,18 @@ export function resolveWebSearchProviderContractEntriesForPluginId(
   const cached = cache.get(pluginId);
   if (cached) {
     return cached;
+  }
+
+  const publicArtifactEntries = resolveBundledExplicitWebSearchProvidersFromPublicArtifacts({
+    onlyPluginIds: [pluginId],
+  })?.map((provider) => ({
+    pluginId: provider.pluginId,
+    provider,
+    credentialValue: resolveWebSearchCredentialValue(provider),
+  }));
+  if (publicArtifactEntries) {
+    cache.set(pluginId, publicArtifactEntries);
+    return publicArtifactEntries;
   }
 
   const entries = loadScopedCapabilityRuntimeRegistryEntries({

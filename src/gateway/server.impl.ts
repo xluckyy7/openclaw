@@ -10,7 +10,9 @@ import {
   getRuntimeConfig,
   isNixMode,
   loadConfig,
+  promoteConfigSnapshotToLastKnownGood,
   readConfigFileSnapshot,
+  recoverConfigFromLastKnownGood,
   registerConfigWriteListener,
   writeConfigFile,
 } from "../config/config.js";
@@ -18,7 +20,7 @@ import { applyPluginAutoEnable } from "../config/plugin-auto-enable.js";
 import { resolveMainSessionKey } from "../config/sessions.js";
 import { clearAgentRunContext } from "../infra/agent-events.js";
 import { isDiagnosticsEnabled } from "../infra/diagnostic-events.js";
-import { logAcceptedEnvOption } from "../infra/env.js";
+import { isVitestRuntimeEnv, logAcceptedEnvOption } from "../infra/env.js";
 import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
@@ -208,7 +210,7 @@ export async function startGatewayServer(
   opts: GatewayServerOptions = {},
 ): Promise<GatewayServer> {
   const minimalTestGateway =
-    process.env.VITEST === "1" && process.env.OPENCLAW_TEST_MINIMAL_GATEWAY === "1";
+    isVitestRuntimeEnv() && process.env.OPENCLAW_TEST_MINIMAL_GATEWAY === "1";
 
   // Ensure all default port derivations (browser/canvas) see the actual runtime port.
   process.env.OPENCLAW_GATEWAY_PORT = String(port);
@@ -243,6 +245,7 @@ export async function startGatewayServer(
 
   let cfgAtStart: OpenClawConfig;
   let startupInternalWriteHash: string | null = null;
+  let startupLastGoodSnapshot = configSnapshot;
   const startupRuntimeConfig = applyConfigOverrides(configSnapshot.config);
   const authBootstrap = await prepareGatewayStartupConfig({
     configSnapshot,
@@ -284,9 +287,17 @@ export async function startGatewayServer(
         log,
       });
   cfgAtStart = controlUiSeed.config;
-  if (authBootstrap.persistedGeneratedToken || controlUiSeed.persistedAllowedOriginsSeed) {
+  // Always capture the final config hash after all startup writes (plugin
+  // auto-enable, auth token generation, control-UI origin seeding) so the
+  // config reloader can recognize its own startup writes and suppress the
+  // spurious hot-reload that would otherwise trigger a SIGUSR1 restart loop.
+  // Previously the hash was only captured when auth or control-UI persisted
+  // changes, missing the plugin auto-enable write performed earlier inside
+  // loadGatewayStartupConfigSnapshot().  See #67436.
+  {
     const startupSnapshot = await readConfigFileSnapshot();
     startupInternalWriteHash = startupSnapshot.hash ?? null;
+    startupLastGoodSnapshot = startupSnapshot;
   }
   const pluginBootstrap = await prepareGatewayPluginBootstrap({
     cfgAtStart,
@@ -592,7 +603,6 @@ export async function startGatewayServer(
     Object.assign(
       runtimeState,
       startGatewayEventSubscriptions({
-        minimalTestGateway,
         broadcast,
         broadcastToConnIds,
         nodeSendToSession,
@@ -776,6 +786,8 @@ export async function startGatewayServer(
       initialInternalWriteHash: startupInternalWriteHash,
       watchPath: configSnapshot.path,
       readSnapshot: readConfigFileSnapshot,
+      recoverSnapshot: recoverConfigFromLastKnownGood,
+      promoteSnapshot: promoteConfigSnapshotToLastKnownGood,
       subscribeToWrites: registerConfigWriteListener,
       deps,
       broadcast,
@@ -805,6 +817,9 @@ export async function startGatewayServer(
       resolveSharedGatewaySessionGenerationForConfig,
       sharedGatewaySessionGenerationState,
       clients,
+    });
+    await promoteConfigSnapshotToLastKnownGood(startupLastGoodSnapshot).catch((err) => {
+      log.warn(`gateway: failed to promote config last-known-good backup: ${String(err)}`);
     });
   } catch (err) {
     await closeOnStartupFailure();
